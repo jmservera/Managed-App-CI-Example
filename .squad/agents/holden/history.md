@@ -47,3 +47,6 @@
 - `plan.name` = SKU value, `plan.product` = offer, `plan.publisher` = publisher
 - `imageReference` goes inside `properties.storageProfile` with publisher/offer/sku/version
 - Certification policy 300.4.8: imageReference must include plan object for marketplace images
+
+**PAYGO vs BYOS Decision (2026-04-01T2130):**
+Coordinator pivoted to PAYGO model after initial BYOS research. Published templates now use `RedHat:RHEL:9-lvm-gen2:latest` (capitalized publisher, no plan block). This trade-off favors deployment velocity and removes licensing/enrollment complexity at the cost of per-minute billing.

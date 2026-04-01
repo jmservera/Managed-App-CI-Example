@@ -92,3 +92,24 @@
 - `createUiDefinition.json` output mappings must exactly match `mainTemplate.json` parameter names
 - CredentialsCombo for Linux outputs `authenticationType`, `password`, and `sshPublicKey` — the createUiDefinition `outputs` block must map these to the single `adminPasswordOrKey` parameter using an `if()` expression
 - API versions used: Microsoft.Network `2023-11-01`, Microsoft.Compute `2024-07-01`
+
+### 2026-04-01 — Deployment & Packaging Artifacts for Service Catalog
+
+**Context:** Created test/deploy infrastructure for the RHEL 9 PAYGO managed application.
+
+**Files created:**
+- `parameters.json` — ARM deployment parameters file with test values (vmName=rhel9-test, sshPublicKey auth, Standard_D2s_v3). Omits params with defaultValue in mainTemplate (location, vnet, subnet, nsg names).
+- `deploy.ps1` — Multi-action PowerShell script supporting Validate, Test, Package, and Publish workflows.
+
+**Key patterns:**
+- Managed app ZIP must contain `mainTemplate.json`, `createUiDefinition.json`, `viewDefinition.json` at the archive root level — no nested folders
+- ZIP has a 120 MB limit for service catalog definitions
+- `az managedapp definition create` requires `--authorizations` in format `principalId:roleDefinitionId` — script auto-resolves current user + Owner role
+- Storage account with public blob access hosts the package URI for the definition
+- `--lock-level ReadOnly` prevents modifications to the managed resource group by the consumer
+- Validation step (`az deployment group validate`) catches schema/parameter issues before real deployment
+
+**User preferences:**
+- jmservera prefers PowerShell for deployment scripts (not Bash)
+- Test values: vmName "rhel9-test", adminUsername "azureuser", sshPublicKey auth type
+- Location default: westeurope
