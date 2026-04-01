@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "vmName": {
+      "value": "rhel9-test"
+    },
+    "vmSize": {
+      "value": "Standard_D2s_v3"
+    },
+    "adminUsername": {
+      "value": "azureuser"
+    },
+    "authenticationType": {
+      "value": "sshPublicKey"
+    },
+    "adminPasswordOrKey": {
+      "value": "ssh-rsa AAAAB3NzaC1yc2EAAAABJQAAAQEAt0KO54pf/hI8Ix0StbCvpn8xm1EakIVtS19VM9C9c3OOdTHIet7a/erIIpVUwlOyFwPr0OyDYLEZZVtTQoLIeppHX8uevgTAqHmSTNX21q61G3rooPkU5fgDwNTtjZ071seMlVnqKa++aPN73158NpnEEm8BMrxPCy+HjNcMLQSlG/BZ9tr3vUH/YJxCApuVlOovRl8Bvv5hp7fKiPHL8mGXfCKNcOyhzzbAhZpnPIO2Ibl+IVz053D+P0Uv5SKEUMs+MpzenthTR3QpoVrbw3IL6MV34azWB5UAYcbGjMlxlYNqmcLQtUygqEhlD4rcbv0LrNxFyYtfdk/QBM9jSQ=="
+    }
+  }
+}

@@ -191,7 +191,7 @@
           "imageReference": {
             "publisher": "RedHat",
             "offer": "RHEL",
-            "sku": "9-lvm-gen2",
+            "sku": "96-gen2",
             "version": "latest"
           },
           "osDisk": {
