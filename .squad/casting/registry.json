@@ -1,0 +1,61 @@
+{
+  "registry_version": "1.0",
+  "entries": [
+    {
+      "persistent_name": "Holden",
+      "role": "Lead / Azure Architect",
+      "universe": "The Expanse",
+      "created_at": "2026-04-01T20:40:00Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    {
+      "persistent_name": "Naomi",
+      "role": "Bicep Engineer",
+      "universe": "The Expanse",
+      "created_at": "2026-04-01T20:40:00Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    {
+      "persistent_name": "Amos",
+      "role": "Security Expert",
+      "universe": "The Expanse",
+      "created_at": "2026-04-01T20:40:00Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    {
+      "persistent_name": "Drummer",
+      "role": "Reliability Expert",
+      "universe": "The Expanse",
+      "created_at": "2026-04-01T20:40:00Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    {
+      "persistent_name": "Alex",
+      "role": "Performance Expert",
+      "universe": "The Expanse",
+      "created_at": "2026-04-01T20:40:00Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    {
+      "persistent_name": "Scribe",
+      "role": "Session Logger",
+      "universe": null,
+      "created_at": "2026-04-01T20:40:00Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    {
+      "persistent_name": "Ralph",
+      "role": "Work Monitor",
+      "universe": null,
+      "created_at": "2026-04-01T20:40:00Z",
+      "legacy_named": false,
+      "status": "active"
+    }
+  ]
+}
