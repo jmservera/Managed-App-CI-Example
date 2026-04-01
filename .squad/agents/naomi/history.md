@@ -21,6 +21,18 @@
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
 
+### 2026-04-01 — PAYGO vs BYOS Trade-offs for RHEL 9
+
+**Context:** Post-decision on originally BYOS-modeled managed app, coordinator pivoted to PAYGO.
+
+**Key insight:** Licensing model choice has cascading implications on template complexity:
+- **BYOS** requires `plan` block + marketplace terms acceptance + Red Hat Cloud Access enrollment + post-deploy subscription-manager registration. More gatekeeping, lower operational friction once licensed.
+- **PAYGO** requires no `plan` block, no enrollment, no registration. VMs pre-entitled for RHUI. Simple deployment model, per-minute billing.
+
+**Pattern:** When designing managed apps around VM images, establish licensing intent early. Switching between models requires touching all three template files (mainTemplate, createUiDefinition, viewDefinition) and image reference URN structure changes (e.g., publisher capitalization: `redhat` BYOS vs. `RedHat` PAYGO).
+
+**Coordinator decision rationale:** PAYGO favors user velocity and reduces deployment friction at the cost of per-minute billing instead of pre-licensed cost control.
+
 ### 2026-04-01 — Marketplace VM with Plan Block (RHEL 9 BYOS)
 
 **Context:** Research for partner managed app deploying RHEL 9 BYOL VM.
@@ -56,3 +68,27 @@
 - https://learn.microsoft.com/marketplace/programmatic-deploy-of-marketplace-products
 
 **Holden's decision:** `holden-rhel9-managed-app.md` proposes `rhel-lvm9-gen2` — I concur with the approach but flagged the need to verify exact Gen2 BYOS SKU via CLI.
+
+### 2026-04-01 — Managed App Template Scaffold (mainTemplate + createUiDefinition + viewDefinition)
+
+**Context:** Scaffolded production-quality managed application templates at repo root.
+
+**Files created:**
+- `mainTemplate.json` — ARM template deploying RHEL 9 BYOL VM with full networking stack (VNet, subnet, NSG, public IP, NIC) and SSH/password auth switching via `authenticationType` parameter condition
+- `createUiDefinition.json` — Portal UI with Basics step (VM name, admin user, CredentialsCombo for SSH/password), VM Settings step (SizeSelector with RHEL BYOS imageReference, VirtualNetworkCombo, NSG name), and BYOL prerequisite InfoBox warning
+- `viewDefinition.json` — Overview kind with header/description for post-deployment management page
+
+**Architecture decisions:**
+- Used `format()` function for default parameter values (VNet name, NSG name derived from vmName) — keeps parameter contracts clean
+- Conditional auth: `osProfile.adminPassword` set only when `authenticationType=password`, `linuxConfiguration` set only when `authenticationType=sshPublicKey`, using ARM `if()` function
+- NSG attached at subnet level (not NIC level) — follows Azure networking best practices
+- Public IP uses Standard SKU with static allocation — required for production workloads
+- SizeSelector includes `imageReference` for RHEL BYOS to show accurate pricing with software costs
+- VirtualNetworkCombo supports both new and existing VNets with proper subnet constraints
+- Plan block uses hardcoded `redhat:rhel-byos:rhel-lvm9-gen2` values (not parameterized) since this managed app is purpose-built for RHEL 9 BYOS
+
+**Key learnings:**
+- `viewDefinition.json` Overview kind only supports `header`, `description`, and `commands` — no dynamic property display from deployment outputs. Deployment outputs are shown automatically in the managed app's Parameters & Outputs blade.
+- `createUiDefinition.json` output mappings must exactly match `mainTemplate.json` parameter names
+- CredentialsCombo for Linux outputs `authenticationType`, `password`, and `sshPublicKey` — the createUiDefinition `outputs` block must map these to the single `adminPasswordOrKey` parameter using an `if()` expression
+- API versions used: Microsoft.Network `2023-11-01`, Microsoft.Compute `2024-07-01`
