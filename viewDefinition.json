@@ -1,0 +1,13 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/viewdefinition/0.0.1-preview/ViewDefinition.json#",
+  "contentVersion": "0.0.0.1",
+  "views": [
+    {
+      "kind": "Overview",
+      "properties": {
+        "header": "RHEL 9 Virtual Machine",
+        "description": "This managed application deploys a Red Hat Enterprise Linux 9 pay-as-you-go virtual machine. RHEL licensing is included in the VM price. Use the Parameters & Outputs blade to view the admin username and VM resource ID."
+      }
+    }
+  ]
+}

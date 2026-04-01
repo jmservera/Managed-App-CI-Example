@@ -1,0 +1,174 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/0.1.2-preview/CreateUIDefinition.MultiVm.json#",
+  "handler": "Microsoft.Azure.CreateUIDef",
+  "version": "0.1.2-preview",
+  "parameters": {
+    "config": {
+      "isWizard": false,
+      "basics": {
+        "description": "Deploy a Red Hat Enterprise Linux 9 pay-as-you-go virtual machine from the Azure Marketplace. RHEL licensing costs are included in the VM price.",
+        "location": {
+          "label": "Region",
+          "toolTip": "Select the Azure region for your deployment.",
+          "resourceTypes": [
+            "Microsoft.Compute/virtualMachines",
+            "Microsoft.Network/virtualNetworks"
+          ]
+        }
+      }
+    },
+    "basics": [
+      {
+        "name": "vmName",
+        "type": "Microsoft.Common.TextBox",
+        "label": "Virtual machine name",
+        "toolTip": "Name of the virtual machine. Must be unique within the resource group.",
+        "defaultValue": "",
+        "constraints": {
+          "required": true,
+          "regex": "^[a-zA-Z][a-zA-Z0-9-]{0,14}$",
+          "validationMessage": "VM name must be 1-15 characters, start with a letter, and contain only letters, numbers, and hyphens."
+        },
+        "visible": true
+      },
+      {
+        "name": "adminUsername",
+        "type": "Microsoft.Common.TextBox",
+        "label": "Admin username",
+        "toolTip": "Administrator username for the virtual machine.",
+        "defaultValue": "azureuser",
+        "constraints": {
+          "required": true,
+          "regex": "^[a-z_][a-z0-9_-]{0,31}$",
+          "validationMessage": "Username must be 1-32 lowercase characters, starting with a letter or underscore."
+        },
+        "visible": true
+      },
+      {
+        "name": "credentials",
+        "type": "Microsoft.Compute.CredentialsCombo",
+        "label": {
+          "authenticationType": "Authentication type",
+          "password": "Password",
+          "confirmPassword": "Confirm password",
+          "sshPublicKey": "SSH public key"
+        },
+        "toolTip": {
+          "authenticationType": "Choose whether to authenticate with a password or SSH public key.",
+          "password": "Password for the admin user.",
+          "sshPublicKey": "SSH public key for the admin user."
+        },
+        "constraints": {
+          "required": true,
+          "customPasswordRegex": "^(?=.*[A-Za-z])(?=.*\\d)[A-Za-z\\d@#$%^&*!]{12,72}$",
+          "customValidationMessage": "Password must be 12-72 characters with at least one letter and one number."
+        },
+        "options": {
+          "hideConfirmation": false,
+          "hidePassword": false
+        },
+        "osPlatform": "Linux",
+        "visible": true
+      }
+    ],
+    "steps": [
+      {
+        "name": "vmSettings",
+        "label": "VM Settings",
+        "subLabel": {
+          "preValidation": "Configure VM size and networking",
+          "postValidation": "Done"
+        },
+        "bladeTitle": "VM Settings",
+        "elements": [
+          {
+            "name": "vmSize",
+            "type": "Microsoft.Compute.SizeSelector",
+            "label": "Virtual machine size",
+            "toolTip": "Select the size for the virtual machine.",
+            "recommendedSizes": [
+              "Standard_D2s_v3",
+              "Standard_D4s_v3",
+              "Standard_D8s_v3"
+            ],
+            "constraints": {
+              "allowedSizes": []
+            },
+            "options": {
+              "hideDiskTypeFilter": false
+            },
+            "osPlatform": "Linux",
+            "imageReference": {
+              "publisher": "RedHat",
+              "offer": "RHEL",
+              "sku": "9-lvm-gen2"
+            },
+            "count": 1,
+            "visible": true
+          },
+          {
+            "name": "vnet",
+            "type": "Microsoft.Network.VirtualNetworkCombo",
+            "label": {
+              "virtualNetwork": "Virtual network",
+              "subnets": "Subnets"
+            },
+            "toolTip": {
+              "virtualNetwork": "Select or create a virtual network for the VM.",
+              "subnets": "Select or create a subnet."
+            },
+            "defaultValue": {
+              "name": "vnet01",
+              "addressPrefixSize": "/16"
+            },
+            "constraints": {
+              "minAddressPrefixSize": "/16"
+            },
+            "options": {
+              "hideExisting": false
+            },
+            "subnets": {
+              "subnet1": {
+                "label": "Subnet",
+                "defaultValue": {
+                  "name": "default",
+                  "addressPrefixSize": "/24"
+                },
+                "constraints": {
+                  "minAddressPrefixSize": "/24",
+                  "minAddressCount": 4,
+                  "requireContiguousAddresses": true
+                }
+              }
+            },
+            "visible": true
+          },
+          {
+            "name": "nsgName",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Network security group name",
+            "toolTip": "Name of the network security group. An SSH inbound rule will be created.",
+            "defaultValue": "[concat(basics('vmName'), '-nsg')]",
+            "constraints": {
+              "required": true,
+              "regex": "^[a-zA-Z][a-zA-Z0-9._-]{0,79}$",
+              "validationMessage": "NSG name must be 1-80 characters, starting with a letter."
+            },
+            "visible": true
+          }
+        ]
+      }
+    ],
+    "outputs": {
+      "vmName": "[basics('vmName')]",
+      "location": "[location()]",
+      "vmSize": "[steps('vmSettings').vmSize]",
+      "adminUsername": "[basics('adminUsername')]",
+      "authenticationType": "[basics('credentials').authenticationType]",
+      "adminPasswordOrKey": "[if(equals(basics('credentials').authenticationType, 'password'), basics('credentials').password, basics('credentials').sshPublicKey)]",
+      "virtualNetworkName": "[steps('vmSettings').vnet.name]",
+      "subnetName": "[steps('vmSettings').vnet.subnets.subnet1.name]",
+      "networkSecurityGroupName": "[steps('vmSettings').nsgName]"
+    }
+  }
+}
