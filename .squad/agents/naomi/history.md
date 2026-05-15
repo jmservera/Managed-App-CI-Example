@@ -5,6 +5,13 @@
 - **Stack:** Azure, Bicep, ARM, Azure Well-Architected Framework
 - **Created:** 2026-04-01
 
+# Project Context
+
+- **Owner:** jmservera
+- **Project:** PSA — Azure architecture using Bicep with focus on security, reliability, and performance pillars
+- **Stack:** Azure, Bicep, ARM, Azure Well-Architected Framework
+- **Created:** 2026-04-01
+
 ## Collaboration
 
 ### 2026-04-01 — RHEL 9 Marketplace Research Initiative
@@ -16,6 +23,16 @@
 - Naomi's pattern templates and Bicep examples exemplify Holden's architectural plan block requirements
 - Created reusable skill (`.squad/skills/marketplace-vm-plan/SKILL.md`) from synthesized findings
 - Both agents' decision documents merged with deduplication into unified `decisions.md`
+
+### 2026-05-15 — Managed Application CI/CD & Documentation Delivery
+
+**Participants:** Naomi (CI/CD workflow), Holden (README documentation), Scribe (Orchestration)
+
+**Cross-Agent Notes:**
+- **Holden's README** documents expected workflow path `.github/workflows/ci.yml` before Naomi's delivery
+- **Naomi's CI implementation** matches Holden's documented expectations: OIDC, ARM-TTK, integration deployment, soft-delete cleanup
+- Both agents' decision notes merged into unified decisions log
+- Orchestration logs created for both agents; session log documents concurrent delivery coordination
 
 ## Learnings
 
@@ -113,3 +130,20 @@
 - jmservera prefers PowerShell for deployment scripts (not Bash)
 - Test values: vmName "rhel9-test", adminUsername "azureuser", sshPublicKey auth type
 - Location default: westeurope
+
+### 2026-05-15 — GitHub Actions CI/CD for managed app lifecycle
+
+**Context:** Added `.github/workflows/ci.yml` to exercise the managed application end to end in GitHub Actions.
+
+**Architecture and workflow patterns:**
+- The CI workflow is intentionally self-contained and does not call `deploy.sh` or `deploy.ps1`; it recreates validation, packaging, publish, deploy, verify, and cleanup with Azure CLI in GitHub Actions.
+- Azure authentication for CI should use OIDC with `azure/login@v2` and the three repository/environment secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID`.
+- ARM-TTK is installed during the run from the official GitHub release, and tests run from a staging folder that includes both `mainTemplate.json` and a compatibility copy named `maintemplate.json`.
+- Package validation checks that `app.zip` contains `mainTemplate.json`, `createUiDefinition.json`, and `viewDefinition.json` at the archive root and remains below the 120 MB service catalog limit.
+- Integration tests publish the package to a temporary storage account, create a service catalog managed app definition, deploy a managed app instance, and verify the VM plus derived resources (`-vnet`, `-nsg`, `-nic`, `-pip`) in the managed resource group.
+- Cleanup uses `if: always()` and captures a managed-resource inventory before deletion so soft-deleted resources can be purged later by resource type; current purge handlers cover Key Vault, App Configuration, and Cognitive Services.
+
+**Key file paths:**
+- Workflow: `.github/workflows/ci.yml`
+- Team decision note: `.squad/decisions/inbox/naomi-cicd-workflow.md`
+- Reusable pattern: `.squad/skills/managed-app-ci-workflow/SKILL.md`

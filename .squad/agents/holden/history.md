@@ -5,6 +5,13 @@
 - **Stack:** Azure, Bicep, ARM, Azure Well-Architected Framework
 - **Created:** 2026-04-01
 
+# Project Context
+
+- **Owner:** jmservera
+- **Project:** PSA — Azure architecture using Bicep with focus on security, reliability, and performance pillars
+- **Stack:** Azure, Bicep, ARM, Azure Well-Architected Framework
+- **Created:** 2026-04-01
+
 ## Collaboration
 
 ### 2026-04-01 — RHEL 9 Marketplace Research Initiative
@@ -17,9 +24,29 @@
 - Naomi's reusable skill (`.squad/skills/marketplace-vm-plan/SKILL.md`) operationalizes Holden's architectural findings
 - Decisions merged into unified `decisions.md` to cross-reference both contributions
 
+### 2026-05-15 — Managed Application CI/CD & Documentation Delivery
+
+**Participants:** Holden (README documentation), Naomi (CI/CD workflow), Scribe (Orchestration)
+
+**Cross-Agent Notes:**
+- **Holden's README** documents CI/CD workflow expectations before Naomi's implementation (`.github/workflows/ci.yml`)
+- **Naomi's CI workflow** fully aligns with Holden's documented architecture: OIDC authentication, ARM-TTK validation, managed app deployment verification, soft-delete cleanup
+- Both agents' decisions merged into unified decisions log; orchestration logs created for accountability
+- Session log documents concurrent delivery coordination and cross-agent alignment
+
 ## Learnings
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
+
+### 2026-05-15 — README for managed app operations
+
+**Context:** Added root `README.md` to explain direct ARM deployment, managed app packaging, Service Catalog publishing, UI sandbox testing, and planned CI usage.
+
+**Lasting notes:**
+- Primary operator entry points are `README.md`, `deploy.sh`, `deploy.ps1`, `mainTemplate.json`, `createUiDefinition.json`, `viewDefinition.json`, and `parameters.json`.
+- The documentation standard for this repo should stay practical: copy-paste Azure CLI commands, Portal navigation steps, and explicit differences between direct ARM deployment and Service Catalog deployment.
+- The managed app package is always the root-level ZIP of `mainTemplate.json`, `createUiDefinition.json`, and `viewDefinition.json`; direct testing continues to use `parameters.json`.
+- CI documentation is anchored to the expected workflow path `.github/workflows/ci.yml`, with OIDC-based GitHub Actions authentication and ARM-TTK plus deployment verification as the intended control gates.
 
 ### 2026-04-01 — RHEL 9 BYOL Managed Application Research
 
