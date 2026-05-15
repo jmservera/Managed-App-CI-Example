@@ -91,7 +91,6 @@
               "Standard_D4s_v3",
               "Standard_D8s_v3"
             ],
-            "constraints": {},
             "options": {
               "hideDiskTypeFilter": false
             },
@@ -165,6 +164,8 @@
       "authenticationType": "[basics('credentials').authenticationType]",
       "adminPasswordOrKey": "[if(equals(basics('credentials').authenticationType, 'password'), basics('credentials').password, basics('credentials').sshPublicKey)]",
       "virtualNetworkName": "[steps('vmSettings').vnet.name]",
+      "virtualNetworkNewOrExisting": "[steps('vmSettings').vnet.newOrExisting]",
+      "virtualNetworkResourceGroup": "[steps('vmSettings').vnet.resourceGroup]",
       "subnetName": "[steps('vmSettings').vnet.subnets.subnet1.name]",
       "networkSecurityGroupName": "[steps('vmSettings').nsgName]"
     }
