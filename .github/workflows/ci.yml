@@ -195,42 +195,36 @@ jobs:
             --allow-blob-public-access true \
             --only-show-errors
 
-          storage_key=$(az storage account keys list \
+          managed_app_principal_id=$(az ad sp show --id "$AZURE_CLIENT_ID" --query id --output tsv)
+          storage_account_id=$(az storage account show \
+            --name "$STORAGE_ACCOUNT" \
             --resource-group "$TEST_RESOURCE_GROUP" \
-            --account-name "$STORAGE_ACCOUNT" \
-            --query '[0].value' \
-            --output tsv 2>/dev/null) || storage_key=""
+            --query id --output tsv)
 
-          if [ -n "$storage_key" ]; then
-            auth_args="--account-key $storage_key"
-          else
-            managed_app_principal_id=$(az ad sp show --id "$AZURE_CLIENT_ID" --query id --output tsv)
-            az role assignment create \
-              --assignee "$managed_app_principal_id" \
-              --role "Storage Blob Data Contributor" \
-              --scope "$(az storage account show --name "$STORAGE_ACCOUNT" --resource-group "$TEST_RESOURCE_GROUP" --query id --output tsv)" \
-              --only-show-errors || true
-            sleep 30
-            auth_args="--auth-mode login"
-          fi
+          az role assignment create \
+            --assignee "$managed_app_principal_id" \
+            --role "Storage Blob Data Contributor" \
+            --scope "$storage_account_id" \
+            --only-show-errors || true
+
+          # Allow role assignment to propagate
+          sleep 30
 
           az storage container create \
             --name "$STORAGE_CONTAINER" \
             --account-name "$STORAGE_ACCOUNT" \
-            $auth_args \
+            --auth-mode login \
             --public-access blob \
             --only-show-errors
 
           az storage blob upload \
             --account-name "$STORAGE_ACCOUNT" \
-            $auth_args \
+            --auth-mode login \
             --container-name "$STORAGE_CONTAINER" \
             --name app.zip \
             --file app.zip \
             --overwrite \
             --only-show-errors
-
-          managed_app_principal_id=$(az ad sp show --id "$AZURE_CLIENT_ID" --query id --output tsv)
           definition_id=$(az managedapp definition create \
             --name "$APP_DEFINITION_NAME" \
             --location "$LOCATION" \
