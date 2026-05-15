@@ -199,18 +199,31 @@ jobs:
             --resource-group "$TEST_RESOURCE_GROUP" \
             --account-name "$STORAGE_ACCOUNT" \
             --query '[0].value' \
-            --output tsv)
+            --output tsv 2>/dev/null) || storage_key=""
+
+          if [ -n "$storage_key" ]; then
+            auth_args="--account-key $storage_key"
+          else
+            managed_app_principal_id=$(az ad sp show --id "$AZURE_CLIENT_ID" --query id --output tsv)
+            az role assignment create \
+              --assignee "$managed_app_principal_id" \
+              --role "Storage Blob Data Contributor" \
+              --scope "$(az storage account show --name "$STORAGE_ACCOUNT" --resource-group "$TEST_RESOURCE_GROUP" --query id --output tsv)" \
+              --only-show-errors || true
+            sleep 30
+            auth_args="--auth-mode login"
+          fi
 
           az storage container create \
             --name "$STORAGE_CONTAINER" \
             --account-name "$STORAGE_ACCOUNT" \
-            --account-key "$storage_key" \
+            $auth_args \
             --public-access blob \
             --only-show-errors
 
           az storage blob upload \
             --account-name "$STORAGE_ACCOUNT" \
-            --account-key "$storage_key" \
+            $auth_args \
             --container-name "$STORAGE_CONTAINER" \
             --name app.zip \
             --file app.zip \
