@@ -50,7 +50,7 @@ Cross-platform scripts (`deploy.sh` for Bash, `deploy.ps1` for PowerShell) handl
 
 ## Key Conventions
 
-- **ARM API versions**: Network resources use `2023-11-01`, VMs use `2024-07-01`. Keep these consistent when adding resources.
+- **ARM API versions**: Network resources use `2025-07-01`, VMs use `2025-11-01`. Keep these consistent when adding resources.
 - **Naming pattern**: Derived resources use `{vmName}-{suffix}` (e.g., `-vnet`, `-nsg`, `-nic`, `-pip`). Maintain this convention.
 - **Authentication**: The template supports both SSH public key and password auth, controlled by the `authenticationType` parameter with a conditional `linuxConfiguration` block.
 - **Default region**: `westeurope` in both deploy scripts.
