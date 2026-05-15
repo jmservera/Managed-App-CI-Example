@@ -192,7 +192,6 @@ jobs:
             --kind StorageV2 \
             --https-only true \
             --min-tls-version TLS1_2 \
-            --allow-blob-public-access true \
             --only-show-errors
 
           managed_app_principal_id=$(az ad sp show --id "$AZURE_CLIENT_ID" --query id --output tsv)
@@ -214,7 +213,6 @@ jobs:
               --name "$STORAGE_CONTAINER" \
               --account-name "$STORAGE_ACCOUNT" \
               --auth-mode login \
-              --public-access blob \
               --only-show-errors 2>/dev/null; then
               echo "Container created successfully on attempt $attempt"
               break
@@ -230,6 +228,20 @@ jobs:
             --file app.zip \
             --overwrite \
             --only-show-errors
+
+          # Generate SAS URL for the blob (user delegation, no account keys needed)
+          sas_expiry=$(date -u -d '+1 hour' '+%Y-%m-%dT%H:%MZ')
+          sas_token=$(az storage blob generate-sas \
+            --account-name "$STORAGE_ACCOUNT" \
+            --container-name "$STORAGE_CONTAINER" \
+            --name app.zip \
+            --permissions r \
+            --expiry "$sas_expiry" \
+            --auth-mode login \
+            --as-user \
+            --output tsv)
+          blob_uri="https://${STORAGE_ACCOUNT}.blob.core.windows.net/${STORAGE_CONTAINER}/app.zip?${sas_token}"
+
           definition_id=$(az managedapp definition create \
             --name "$APP_DEFINITION_NAME" \
             --location "$LOCATION" \
@@ -238,7 +250,7 @@ jobs:
             --display-name "$APP_DEFINITION_DISPLAY_NAME" \
             --description "$APP_DEFINITION_DESCRIPTION" \
             --authorizations "${managed_app_principal_id}:$OWNER_ROLE_ID" \
-            --package-file-uri "https://${STORAGE_ACCOUNT}.blob.core.windows.net/${STORAGE_CONTAINER}/app.zip" \
+            --package-file-uri "$blob_uri" \
             --query id \
             --output tsv)
 
