@@ -1,4 +1,4 @@
-# Azure Service Catalog Managed Application: 3rd-Party Marketplace VM Image Packaging
+# Azure Managed Application CI example: 3rd-Party Marketplace VM Image Packaging and Testing
 
 This repository is a **reference implementation** showing how to package a 3rd-party marketplace virtual machine image as an Azure Service Catalog managed application. It demonstrates the complete workflow for packaging, publishing, and deploying a marketplace VM image through Azure's managed application framework.
 
