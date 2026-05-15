@@ -5,3 +5,7 @@
 .squad/sessions/
 # Squad: SubSquad activation file (local to this machine)
 .squad-workstream
+
+# Managed app build artifacts
+app.zip
+.ci/
