@@ -207,15 +207,20 @@ jobs:
             --scope "$storage_account_id" \
             --only-show-errors || true
 
-          # Allow role assignment to propagate
-          sleep 30
-
-          az storage container create \
-            --name "$STORAGE_CONTAINER" \
-            --account-name "$STORAGE_ACCOUNT" \
-            --auth-mode login \
-            --public-access blob \
-            --only-show-errors
+          # Wait for role propagation and retry container creation
+          for attempt in $(seq 1 6); do
+            sleep 30
+            if az storage container create \
+              --name "$STORAGE_CONTAINER" \
+              --account-name "$STORAGE_ACCOUNT" \
+              --auth-mode login \
+              --public-access blob \
+              --only-show-errors 2>/dev/null; then
+              echo "Container created successfully on attempt $attempt"
+              break
+            fi
+            echo "Container creation attempt $attempt failed, retrying..."
+          done
 
           az storage blob upload \
             --account-name "$STORAGE_ACCOUNT" \
