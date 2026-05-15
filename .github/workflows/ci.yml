@@ -1,0 +1,436 @@
+name: Managed App CI/CD
+
+on:
+  push:
+    paths:
+      - 'mainTemplate.json'
+      - 'createUiDefinition.json'
+      - 'viewDefinition.json'
+      - 'parameters.json'
+      - 'deploy.sh'
+      - 'deploy.ps1'
+      - '.github/workflows/ci.yml'
+  schedule:
+    - cron: '0 3 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: managed-app-ci-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  LOCATION: westeurope
+  TEST_RESOURCE_GROUP: psa-ci-test-${{ github.run_number }}
+  MANAGED_RESOURCE_GROUP: psa-ci-managed-${{ github.run_number }}
+  STORAGE_CONTAINER: appcontainer
+  APP_DEFINITION_NAME: psa-ci-def-${{ github.run_number }}
+  APP_DEFINITION_DISPLAY_NAME: PSA CI Managed App ${{ github.run_number }}
+  APP_DEFINITION_DESCRIPTION: CI validation package for the PSA managed application.
+  MANAGED_APP_NAME: psa-ci-app-${{ github.run_number }}
+  VM_NAME: citest-vm
+  OWNER_ROLE_ID: 8e3af657-a8ff-443c-a75c-2fe8c4bcb635
+
+jobs:
+  validate-package-deploy:
+    name: Validate, package, and integration test
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # Required repository or environment secrets for OIDC federation:
+      # - AZURE_CLIENT_ID
+      # - AZURE_TENANT_ID
+      # - AZURE_SUBSCRIPTION_ID
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Prepare generated inputs
+        run: |
+          set -euo pipefail
+          mkdir -p .ci/generated .ci/arm-ttk-workdir .ci/tools
+          ssh-keygen -t rsa -b 4096 -N '' -f .ci/generated/id_rsa -q
+
+          storage_hash=$(printf '%s' "psaci${GITHUB_RUN_ID}${GITHUB_RUN_ATTEMPT}" | md5sum | cut -c1-18)
+          echo "STORAGE_ACCOUNT=psa${storage_hash}" >> "$GITHUB_ENV"
+
+          python3 <<'PY'
+          import json
+          from pathlib import Path
+
+          parameters_path = Path('parameters.json')
+          generated_path = Path('.ci/generated/parameters.json')
+          managedapp_path = Path('.ci/generated/managedapp-parameters.json')
+          parameters = json.loads(parameters_path.read_text())
+          parameters['parameters']['vmName']['value'] = 'citest-vm'
+          parameters['parameters']['adminPasswordOrKey']['value'] = Path('.ci/generated/id_rsa.pub').read_text().strip()
+          generated_path.write_text(json.dumps(parameters, indent=2) + '\n')
+          # Managed app create expects just the parameters object (no $schema wrapper)
+          managedapp_path.write_text(json.dumps(parameters['parameters'], indent=2) + '\n')
+          PY
+
+          cp mainTemplate.json .ci/arm-ttk-workdir/mainTemplate.json
+          cp createUiDefinition.json .ci/arm-ttk-workdir/createUiDefinition.json
+          cp viewDefinition.json .ci/arm-ttk-workdir/viewDefinition.json
+          cp parameters.json .ci/arm-ttk-workdir/parameters.json
+
+      - name: Create test resource group
+        run: |
+          set -euo pipefail
+          az group create \
+            --name "$TEST_RESOURCE_GROUP" \
+            --location "$LOCATION" \
+            --tags purpose=psa-ci github-run="${{ github.run_id }}" \
+            --only-show-errors
+
+      - name: Install ARM-TTK
+        shell: pwsh
+        run: |
+          $release = Invoke-RestMethod -Uri 'https://api.github.com/repos/Azure/arm-ttk/releases/latest'
+          $asset = $release.assets | Where-Object { $_.name -like '*.zip' } | Select-Object -First 1
+
+          if (-not $asset) {
+            throw 'Unable to locate an ARM-TTK release asset.'
+          }
+
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile '.ci/tools/arm-ttk.zip'
+          Expand-Archive -Path '.ci/tools/arm-ttk.zip' -DestinationPath '.ci/tools/arm-ttk' -Force
+
+          $module = Get-ChildItem '.ci/tools/arm-ttk' -Recurse -Filter 'arm-ttk.psd1' | Select-Object -First 1
+          if (-not $module) {
+            throw 'ARM-TTK module file was not found after extraction.'
+          }
+
+          "ARM_TTK_MODULE=$($module.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Run ARM-TTK tests
+        shell: pwsh
+        run: |
+          Import-Module $env:ARM_TTK_MODULE -Force
+          $templateRoot = Resolve-Path '.ci/arm-ttk-workdir'
+
+          $templateOutput = @(Test-AzTemplate -TemplatePath $templateRoot -File 'mainTemplate.json')
+          $uiOutput = @(Test-AzTemplate -TemplatePath $templateRoot -File 'createUiDefinition.json')
+          $marketplaceOutput = @(Test-AzMarketplacePackage -TemplatePath $templateRoot)
+
+          $templateOutput | Out-Host
+          $uiOutput | Out-Host
+          $marketplaceOutput | Out-Host
+
+          $allOutput = @()
+          $allOutput += $templateOutput
+          $allOutput += $uiOutput
+          $allOutput += $marketplaceOutput
+
+          if ($allOutput | Where-Object { $_.Errors }) {
+            throw 'ARM-TTK reported one or more errors.'
+          }
+
+      - name: Validate ARM deployment
+        run: |
+          set -euo pipefail
+          az deployment group validate \
+            --resource-group "$TEST_RESOURCE_GROUP" \
+            --template-file mainTemplate.json \
+            --parameters @.ci/generated/parameters.json \
+            --only-show-errors
+
+      - name: Package managed application
+        run: |
+          set -euo pipefail
+          rm -f app.zip
+          zip -q app.zip mainTemplate.json createUiDefinition.json viewDefinition.json
+
+          archive_size_bytes=$(stat -c%s app.zip)
+          archive_limit_bytes=$((120 * 1024 * 1024))
+
+          if (( archive_size_bytes > archive_limit_bytes )); then
+            echo "app.zip exceeds the 120 MB managed application limit." >&2
+            exit 1
+          fi
+
+          expected_entries=$'createUiDefinition.json\nmainTemplate.json\nviewDefinition.json'
+          actual_entries=$(unzip -Z1 app.zip | sort)
+
+          if [[ "$actual_entries" != "$expected_entries" ]]; then
+            echo 'app.zip does not contain the expected root-level files.' >&2
+            echo "$actual_entries" >&2
+            exit 1
+          fi
+
+          printf 'app.zip size: %.2f MB\n' "$(python3 - <<'PY'
+          from pathlib import Path
+          print(Path('app.zip').stat().st_size / (1024 * 1024))
+          PY
+          )"
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: managed-app-package-${{ github.run_number }}
+          path: app.zip
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish service catalog package
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+        run: |
+          set -euo pipefail
+          az storage account create \
+            --name "$STORAGE_ACCOUNT" \
+            --resource-group "$TEST_RESOURCE_GROUP" \
+            --location "$LOCATION" \
+            --sku Standard_LRS \
+            --kind StorageV2 \
+            --https-only true \
+            --min-tls-version TLS1_2 \
+            --only-show-errors
+
+          managed_app_principal_id=$(az ad sp show --id "$AZURE_CLIENT_ID" --query id --output tsv)
+          storage_account_id=$(az storage account show \
+            --name "$STORAGE_ACCOUNT" \
+            --resource-group "$TEST_RESOURCE_GROUP" \
+            --query id --output tsv)
+
+          az role assignment create \
+            --assignee "$managed_app_principal_id" \
+            --role "Storage Blob Data Contributor" \
+            --scope "$storage_account_id" \
+            --only-show-errors || true
+
+          # Wait for role propagation and retry container creation
+          for attempt in $(seq 1 6); do
+            sleep 30
+            if az storage container create \
+              --name "$STORAGE_CONTAINER" \
+              --account-name "$STORAGE_ACCOUNT" \
+              --auth-mode login \
+              --only-show-errors 2>/dev/null; then
+              echo "Container created successfully on attempt $attempt"
+              break
+            fi
+            echo "Container creation attempt $attempt failed, retrying..."
+          done
+
+          az storage blob upload \
+            --account-name "$STORAGE_ACCOUNT" \
+            --auth-mode login \
+            --container-name "$STORAGE_CONTAINER" \
+            --name app.zip \
+            --file app.zip \
+            --overwrite \
+            --only-show-errors
+
+          # Generate SAS URL for the blob (user delegation, no account keys needed)
+          sas_expiry=$(date -u -d '+1 hour' '+%Y-%m-%dT%H:%MZ')
+          sas_token=$(az storage blob generate-sas \
+            --account-name "$STORAGE_ACCOUNT" \
+            --container-name "$STORAGE_CONTAINER" \
+            --name app.zip \
+            --permissions r \
+            --expiry "$sas_expiry" \
+            --auth-mode login \
+            --as-user \
+            --output tsv)
+          blob_uri="https://${STORAGE_ACCOUNT}.blob.core.windows.net/${STORAGE_CONTAINER}/app.zip?${sas_token}"
+
+          definition_id=$(az managedapp definition create \
+            --name "$APP_DEFINITION_NAME" \
+            --location "$LOCATION" \
+            --resource-group "$TEST_RESOURCE_GROUP" \
+            --lock-level ReadOnly \
+            --display-name "$APP_DEFINITION_DISPLAY_NAME" \
+            --description "$APP_DEFINITION_DESCRIPTION" \
+            --authorizations "${managed_app_principal_id}:$OWNER_ROLE_ID" \
+            --package-file-uri "$blob_uri" \
+            --query id \
+            --output tsv)
+
+          managed_rg_id="/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/$MANAGED_RESOURCE_GROUP"
+
+          az managedapp create \
+            --name "$MANAGED_APP_NAME" \
+            --resource-group "$TEST_RESOURCE_GROUP" \
+            --location "$LOCATION" \
+            --kind ServiceCatalog \
+            --managed-rg-id "$managed_rg_id" \
+            --managedapp-definition-id "$definition_id" \
+            --parameters @.ci/generated/managedapp-parameters.json \
+            --only-show-errors
+
+      - name: Wait for managed application deployment
+        run: |
+          set -euo pipefail
+
+          for attempt in $(seq 1 120); do
+            state=$(az managedapp show \
+              --resource-group "$TEST_RESOURCE_GROUP" \
+              --name "$MANAGED_APP_NAME" \
+              --query provisioningState \
+              --output tsv 2>/dev/null || true)
+
+            echo "Managed application provisioning state: ${state:-unknown}"
+
+            case "$state" in
+              Succeeded)
+                break
+                ;;
+              Failed|Canceled)
+                echo "Managed application deployment failed with state: $state" >&2
+                exit 1
+                ;;
+            esac
+
+            sleep 30
+          done
+
+          if [[ "${state:-}" != 'Succeeded' ]]; then
+            echo 'Managed application deployment timed out.' >&2
+            exit 1
+          fi
+
+      - name: Verify deployed resources
+        run: |
+          set -euo pipefail
+
+          for attempt in $(seq 1 40); do
+            if [[ "$(az group exists --name "$MANAGED_RESOURCE_GROUP")" == 'true' ]]; then
+              break
+            fi
+            sleep 15
+          done
+
+          if [[ "$(az group exists --name "$MANAGED_RESOURCE_GROUP")" != 'true' ]]; then
+            echo 'Managed resource group was not created.' >&2
+            exit 1
+          fi
+
+          az resource list \
+            --resource-group "$MANAGED_RESOURCE_GROUP" \
+            --query "[].{name:name,type:type,location:location}" \
+            --output json > .ci/generated/managed-resource-inventory.json
+
+          vm_state=$(az vm show \
+            --resource-group "$MANAGED_RESOURCE_GROUP" \
+            --name "$VM_NAME" \
+            --query provisioningState \
+            --output tsv)
+
+          [[ "$vm_state" == 'Succeeded' ]]
+
+          az network nic show \
+            --resource-group "$MANAGED_RESOURCE_GROUP" \
+            --name "$VM_NAME-nic" \
+            --query name \
+            --output tsv | grep -Fx "$VM_NAME-nic"
+
+          az network public-ip show \
+            --resource-group "$MANAGED_RESOURCE_GROUP" \
+            --name "$VM_NAME-pip" \
+            --query sku.name \
+            --output tsv | grep -Fx 'Standard'
+
+          az network nsg show \
+            --resource-group "$MANAGED_RESOURCE_GROUP" \
+            --name "$VM_NAME-nsg" \
+            --query name \
+            --output tsv | grep -Fx "$VM_NAME-nsg"
+
+          az network vnet show \
+            --resource-group "$MANAGED_RESOURCE_GROUP" \
+            --name "$VM_NAME-vnet" \
+            --query name \
+            --output tsv | grep -Fx "$VM_NAME-vnet"
+
+      - name: Cleanup Azure resources
+        if: always()
+        run: |
+          set +e
+          mkdir -p .ci/generated
+
+          if [[ ! -f .ci/generated/managed-resource-inventory.json ]]; then
+            if [[ "$(az group exists --name "$MANAGED_RESOURCE_GROUP" 2>/dev/null)" == 'true' ]]; then
+              az resource list \
+                --resource-group "$MANAGED_RESOURCE_GROUP" \
+                --query "[].{name:name,type:type,location:location}" \
+                --output json > .ci/generated/managed-resource-inventory.json || echo '[]' > .ci/generated/managed-resource-inventory.json
+            else
+              echo '[]' > .ci/generated/managed-resource-inventory.json
+            fi
+          fi
+
+          az managedapp delete \
+            --resource-group "$TEST_RESOURCE_GROUP" \
+            --name "$MANAGED_APP_NAME" \
+            --only-show-errors || true
+
+          for attempt in $(seq 1 40); do
+            if ! az managedapp show --resource-group "$TEST_RESOURCE_GROUP" --name "$MANAGED_APP_NAME" --only-show-errors >/dev/null 2>&1; then
+              break
+            fi
+            sleep 15
+          done
+
+          az managedapp definition delete \
+            --resource-group "$TEST_RESOURCE_GROUP" \
+            --name "$APP_DEFINITION_NAME" \
+            --only-show-errors || true
+
+          az group delete --name "$MANAGED_RESOURCE_GROUP" --yes --only-show-errors || true
+          az group delete --name "$TEST_RESOURCE_GROUP" --yes --only-show-errors || true
+
+          for group_name in "$MANAGED_RESOURCE_GROUP" "$TEST_RESOURCE_GROUP"; do
+            for attempt in $(seq 1 60); do
+              exists=$(az group exists --name "$group_name" 2>/dev/null || echo false)
+              if [[ "$exists" != 'true' ]]; then
+                break
+              fi
+              sleep 15
+            done
+
+            if [[ "$(az group exists --name "$group_name" 2>/dev/null || echo false)" == 'true' ]]; then
+              echo "::warning::Resource group $group_name still exists after cleanup polling. Manual cleanup may be required."
+            fi
+          done
+
+          python3 <<'PY' > .ci/generated/purge-candidates.tsv
+          import json
+          from pathlib import Path
+
+          inventory = Path('.ci/generated/managed-resource-inventory.json')
+          resources = json.loads(inventory.read_text()) if inventory.exists() else []
+          for resource in resources:
+              print(f"{resource.get('type', '')}\t{resource.get('name', '')}\t{resource.get('location', '')}")
+          PY
+
+          while IFS=$'\t' read -r resource_type resource_name resource_location; do
+            case "$resource_type" in
+              Microsoft.KeyVault/vaults)
+                echo "Purging soft-deleted Key Vault: $resource_name"
+                az keyvault purge --name "$resource_name" --only-show-errors || true
+                ;;
+              Microsoft.AppConfiguration/configurationStores)
+                echo "Purging soft-deleted App Configuration store: $resource_name"
+                az appconfig purge --name "$resource_name" --location "$resource_location" --yes --only-show-errors || true
+                ;;
+              Microsoft.CognitiveServices/accounts)
+                echo "Purging soft-deleted Cognitive Services account: $resource_name"
+                az cognitiveservices account purge \
+                  --name "$resource_name" \
+                  --resource-group "$MANAGED_RESOURCE_GROUP" \
+                  --location "$resource_location" \
+                  --only-show-errors || true
+                ;;
+            esac
+          done < .ci/generated/purge-candidates.tsv
