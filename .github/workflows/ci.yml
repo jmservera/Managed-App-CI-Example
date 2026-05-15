@@ -70,10 +70,13 @@ jobs:
 
           parameters_path = Path('parameters.json')
           generated_path = Path('.ci/generated/parameters.json')
+          managedapp_path = Path('.ci/generated/managedapp-parameters.json')
           parameters = json.loads(parameters_path.read_text())
           parameters['parameters']['vmName']['value'] = 'citest-vm'
           parameters['parameters']['adminPasswordOrKey']['value'] = Path('.ci/generated/id_rsa.pub').read_text().strip()
           generated_path.write_text(json.dumps(parameters, indent=2) + '\n')
+          # Managed app create expects just the parameters object (no $schema wrapper)
+          managedapp_path.write_text(json.dumps(parameters['parameters'], indent=2) + '\n')
           PY
 
           cp mainTemplate.json .ci/arm-ttk-workdir/mainTemplate.json
@@ -263,7 +266,7 @@ jobs:
             --kind ServiceCatalog \
             --managed-rg-id "$managed_rg_id" \
             --managedapp-definition-id "$definition_id" \
-            --parameters @.ci/generated/parameters.json \
+            --parameters @.ci/generated/managedapp-parameters.json \
             --only-show-errors
 
       - name: Wait for managed application deployment
