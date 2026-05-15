@@ -277,7 +277,7 @@ jobs:
             state=$(az managedapp show \
               --resource-group "$TEST_RESOURCE_GROUP" \
               --name "$MANAGED_APP_NAME" \
-              --query properties.provisioningState \
+              --query provisioningState \
               --output tsv 2>/dev/null || true)
 
             echo "Managed application provisioning state: ${state:-unknown}"
