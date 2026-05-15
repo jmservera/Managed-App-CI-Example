@@ -1,3 +1,5 @@
+[![Managed App CI/CD](https://github.com/jmservera/Managed-App-CI-Example/actions/workflows/ci.yml/badge.svg)](https://github.com/jmservera/Managed-App-CI-Example/actions/workflows/ci.yml)
+
 # Azure Managed Application CI example: 3rd-Party Marketplace VM Image Packaging and Testing
 
 This repository is a **reference implementation** showing how to package a 3rd-party marketplace virtual machine image as an Azure Service Catalog managed application. It demonstrates the complete workflow for packaging, publishing, and deploying a marketplace VM image through Azure's managed application framework.
