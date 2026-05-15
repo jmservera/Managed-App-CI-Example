@@ -91,9 +91,7 @@
               "Standard_D4s_v3",
               "Standard_D8s_v3"
             ],
-            "constraints": {
-              "allowedSizes": []
-            },
+            "constraints": {},
             "options": {
               "hideDiskTypeFilter": false
             },
